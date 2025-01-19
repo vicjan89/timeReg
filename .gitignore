@@ -1,0 +1,5 @@
+/.venv/
+secrets.txt
+/timetracking/timemoneystore/migrations/
+/timetracking/db.sqlite3
+/.idea/
