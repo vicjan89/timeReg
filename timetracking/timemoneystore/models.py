@@ -30,3 +30,18 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'{self.task} {self.cost} {self.date}'
+
+class Event(models.Model):
+    name = models.CharField(max_length=100, verbose_name="Event")
+    lower_limit = models.FloatField(verbose_name="Lower Limit", null=True, blank=True)
+    upper_limit = models.FloatField(verbose_name="Upper Limit", null=True, blank=True)
+    unit = models.CharField(max_length=100, verbose_name="Unit", null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.name}'
+
+class EventRegistration(models.Model):
+    event = models.ForeignKey(Event, verbose_name="Event", on_delete=models.CASCADE, related_name='parameters')
+    value = models.FloatField(verbose_name="Value", null=True, blank=True)
+    time_start = models.DateTimeField(verbose_name="start", null=True, blank=True)
+    time_end = models.DateTimeField(verbose_name="end", blank=True, null=True)
