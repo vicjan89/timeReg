@@ -21,5 +21,5 @@ import timetracking.timemoney.views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('graph/', timetracking.timemoney.views.time_graph, name='time_graph'),
+    path('graph/', timetracking.timemoney.views.graph, name='graph'),
 ]
