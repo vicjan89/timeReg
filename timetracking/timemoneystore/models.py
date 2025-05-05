@@ -18,10 +18,12 @@ class Task(models.Model):
 
 class Time(models.Model):
     time_start = models.DateTimeField(verbose_name="Start Time", auto_now_add=False, default=datetime.now)
+    time_end = models.DateTimeField(verbose_name="End Time", auto_now_add=False,
+                                    default="2025-05-05 12:00:00")
     task = models.ForeignKey(Task, verbose_name="Task", on_delete=models.CASCADE, related_name='time_starts')
 
     def __str__(self):
-        return f'{self.time_start:%Y-%m-%d %H:%M} {self.task}'
+        return f'{self.time_start:%Y-%m-%d %H:%M} {self.time_end:%H:%M} {self.task}'
 
 class Payment(models.Model):
     cost = models.PositiveIntegerField(verbose_name="Cost")

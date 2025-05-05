@@ -1,11 +1,42 @@
 import datetime
 
+from django.conf import settings
 from django.contrib import admin
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from timemoneystore.models import Time, Task, Payment, Event, EventRegistration
+import matplotlib.pyplot as plt
+plt.switch_backend('Agg')  # Меняет бэкенд на безопасный для серверов
+import numpy as np
+import pandas as pd
+
 
 admin.site.site_header = 'timeReg'
+
+def graph(x, y, label_x, label_y, moving_average: bool = False):
+
+    # Создание графика
+    plt.figure(figsize=(8, 5))  # Размер графика
+    plt.bar(x, y)
+    if moving_average:
+        # Вычисляем скользящее среднее
+        window_size = int(len(x) / 5) + 1  # Размер окна
+        y_smooth = pd.Series(y).rolling(window=window_size, center=True).mean()
+        plt.plot(x, y_smooth, color="red", linestyle="-",
+                 label=f"Moving Average ({window_size=})")
+
+    # Добавление подписей и легенды
+    plt.xlabel(label_x)
+    # Наклон подписей
+    plt.xticks(rotation=45, ha="right")  # ha="right" - выравнивание текста
+    plt.ylabel(label_y)
+    plt.legend()
+    plt.title("Graph of Tasks")
+    plt.savefig(settings.MEDIA_ROOT / f'graph.png', dpi=300, bbox_inches="tight")
+    plt.close()
+    return HttpResponse(f'<img src="/media/graph.png" style="width: auto; height: 100%;" />')
+
 
 class DateFilter(admin.SimpleListFilter):
     title = 'Date'
@@ -47,8 +78,8 @@ class DateFilter(admin.SimpleListFilter):
 
 @admin.register(Time)
 class TimeAdmin(admin.ModelAdmin):
-    list_display = ('time_start', 'task')
-    actions = ('calc_time', 'calc_time_for_task')
+    list_display = ('time_start', 'time_end', 'task')
+    actions = ('calc_time', 'calc_time_for_tasks', 'calc_time_for_parents')
     list_filter = [DateFilter]
 
     def get_form(self, request, obj=None, **kwargs):
@@ -56,49 +87,63 @@ class TimeAdmin(admin.ModelAdmin):
         form.base_fields['task'].queryset = Task.objects.filter(done=False)
         return form
 
+    @admin.action(description='Calc time for tasks')
+    def calc_time_for_tasks(self, request, queryset):
+        tasks = {}
+        for time in queryset:
+            duration = time.time_end - time.time_start
+            if time.task.name != 'Отдых':
+                if time.task.name not in tasks:
+                    tasks[time.task.name] = duration
+                else:
+                    tasks[time.task.name] += duration
+        durations = []
+        task_names = []
+        for name, duration in tasks.items():
+            task_names.append(name)
+            durations.append(duration.total_seconds() / 3600)
+        return graph(task_names, durations, "Tasks", "Durations")
+
+    @admin.action(description='Calc time for parents')
+    def calc_time_for_parents(self, request, queryset):
+        tasks = {}
+        for time in queryset:
+            duration = time.time_end - time.time_start
+            if time.task.name != 'Отдых':
+                task = time.task
+                name = time.task.name
+                while task.parent_task:
+                    task = task.parent_task
+                    name = task.name
+                if name not in tasks:
+                    tasks[name] = duration
+                else:
+                    tasks[name] += duration
+        durations = []
+        task_names = []
+        for name, duration in tasks.items():
+            task_names.append(name)
+            durations.append(duration.total_seconds() / 3600)
+        return graph(task_names, durations, "Tasks", "Durations")
+
+
     @admin.action(description='Calc time for day')
     def calc_time(self, request, queryset):
         time_sum = {}
-        time_worked = None
         for time in queryset.reverse():
             if 'Отдых' != time.task.name:
-                time_worked = time
-            else:
-                if time_worked:
-                    date = time_worked.time_start.date()
+                    date = time.time_start.date()
+                    duration = time.time_end - time.time_start
                     if date in time_sum:
-                        time_sum[date] += time.time_start - time_worked.time_start
+                        time_sum[date] += duration
                     else:
-                        time_sum[date] = time.time_start - time_worked.time_start
+                        time_sum[date] = duration
         dates = []
         hours = []
         for date, time in time_sum.items():
-            dates.append(f'{date}')
-            hours.append(f'{time.total_seconds() / 3600:.2f}')
-        url = reverse('graph')
-        return redirect(f'{url}?x=' + ','.join(dates) + '&y=' + ','.join(hours) + '&name=Time for day')
-
-    @admin.action(description='Calc time for task')
-    def calc_time_for_task(self, request, queryset):
-        time_sum = {}
-        time_worked = None
-        for time in queryset.reverse():
-            if 'Отдых' != time.task.name :
-                time_worked = time
-            if time_worked and time.task.name != time_worked.task.name:
-                if time_worked:
-                    task_name = time_worked.task.name
-                    if task_name in time_sum:
-                        time_sum[task_name] += time.time_start - time_worked.time_start
-                    else:
-                        time_sum[task_name] = time.time_start - time_worked.time_start
-        tasks = []
-        hours = []
-        for task_name, time in time_sum.items():
-            tasks.append(f'{task_name}')
-            hours.append(f'{time.total_seconds() / 3600:.2f}')
-        url = reverse('graph')
-        return redirect(f'{url}?x=' + ','.join(tasks) + '&y=' + ','.join(hours) + '&name=Time for task')
+            dates.append(date)
+            hours.append(time.total_seconds() / 3600)
+        return graph(dates, hours, 'Dates', 'Hours', moving_average=True)
 
 
 @admin.register(Task)
